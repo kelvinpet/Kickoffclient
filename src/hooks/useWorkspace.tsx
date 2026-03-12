@@ -10,7 +10,6 @@ export interface Workspace {
   brand_color: string;
   plan: string;
   monthly_submission_limit: number;
-  paystack_plan_code: string | null;
   created_at: string;
 }
 

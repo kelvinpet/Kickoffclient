@@ -1,12 +1,13 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import InteractiveDemo from "@/components/InteractiveDemo";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Zap, CheckCircle, ArrowRight, Moon, Sun, FileText, Sparkles, Send, Users, Briefcase, Code, BarChart3, X, Check, Shield, Lock, ChevronDown, ClipboardCheck, Receipt, Rocket } from "lucide-react";
 import { useTheme } from "@/lib/theme";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import dashboardMockup from "@/assets/dashboard-mockup.png";
+import { pricingPlans } from "@/data/pricing";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -19,7 +20,7 @@ const features = [
   "Shareable client links",
   "Summary, risks, timeline & milestones",
   "Digital client approval & contracts",
-  "Deposit collection via Paystack",
+  "Secure payments via Flutterwave",
 ];
 
 const steps = [
@@ -54,7 +55,7 @@ const faqs = [
   { q: "Can I edit the generated report?", a: "Yes. You can regenerate reports with different modes (detailed or proposal-ready), copy any section to your clipboard, and export to PDF on the Pro plan." },
   { q: "Can clients approve scope digitally?", a: "Absolutely. Every submission generates a secure portal link. Clients can review the full kickoff pack, approve scope, receive a contract, and pay a deposit — all from one link." },
   { q: "What happens on the Free plan?", a: "You get up to 2 submissions per month with full AI-generated kickoff packs. Upgrade to Pro for unlimited submissions, PDF export, and custom branding." },
-  { q: "Is my data secure?", a: "Yes. All data is encrypted in transit and at rest. Payment processing is handled securely by Paystack. We never share your client data with third parties." },
+  { q: "Is my data secure?", a: "Yes. All data is encrypted in transit and at rest. Payment processing is handled securely by Flutterwave. We never share your client data with third parties." },
 ];
 
 export default function Landing() {
@@ -125,7 +126,7 @@ export default function Landing() {
               <Button variant="outline" size="lg" className="text-base px-8 h-12 w-full sm:w-auto">View pricing</Button>
             </Link>
           </div>
-          <p className="text-sm text-muted-foreground">No credit card required · Secure payments via Paystack</p>
+          <p className="text-sm text-muted-foreground">No credit card required · Secure payments via Flutterwave</p>
         </motion.div>
 
         {/* Hero Mockup */}
@@ -164,6 +165,38 @@ export default function Landing() {
             </motion.div>
           ))}
         </motion.div>
+
+        {/* Pricing section */}
+        <section className="mt-20">
+          <h2 className="text-2xl font-bold text-foreground text-center mb-8">Pricing</h2>
+          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+            {pricingPlans.map((plan) => (
+              <Card key={plan.id} className={plan.id === "pro" ? "border-primary" : ""}>
+                <CardHeader>
+                  <CardTitle className="text-xl">{plan.name}</CardTitle>
+                  <p className="text-3xl font-bold text-foreground">
+                    {plan.price}{plan.monthlyLabel || ""}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-3 mb-6">
+                    {plan.features.map((f) => (
+                      <li key={f} className="flex items-center gap-2 text-sm text-foreground">
+                        <Check className="h-4 w-4 text-primary shrink-0" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link to="/pricing">
+                    <Button variant={plan.popular ? "default" : "outline"} className="w-full">
+                      {plan.cta}
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
       </main>
 
       {/* Pipeline Section */}
@@ -345,7 +378,7 @@ export default function Landing() {
 
             {/* Trust elements */}
             <div className="flex items-center justify-center gap-6 mt-10 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" /> Secure payments via Paystack</span>
+              <span className="flex items-center gap-1.5"><Shield className="h-3.5 w-3.5" /> Secure payments via Flutterwave</span>
               <span className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5" /> Your data stays private</span>
             </div>
           </motion.div>

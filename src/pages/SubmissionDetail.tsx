@@ -156,13 +156,23 @@ export default function SubmissionDetail() {
       }
     });
     supabase.from("ai_reports").select("*").eq("submission_id", id).single().then(({ data }) => setReport(data));
-    (supabase.from("contract_signatures" as any) as any)
-      .select("*")
-      .eq("submission_id", id)
-      .order("signed_at", { ascending: false })
-      .limit(1)
-      .single()
-      .then(({ data: sig }: any) => { if (sig) setContractSignature(sig); });
+    // fetch latest contract signature, ignoring 406 errors which may occur
+    (async () => {
+      try {
+        const { data: sig, error } = await (supabase.from("contract_signatures" as any) as any)
+          .select("*")
+          .eq("submission_id", id)
+          .order("signed_at", { ascending: false })
+          .limit(1)
+          .single();
+        if (error && error.status !== 406) {
+          console.error("signature query error", error);
+        }
+        if (sig) setContractSignature(sig);
+      } catch (e) {
+        console.error("signature fetch failed", e);
+      }
+    })();
     fetchVersions();
   }, [id]);
 

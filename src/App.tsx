@@ -28,6 +28,7 @@ import Terms from "@/pages/Terms";
 import Privacy from "@/pages/Privacy";
 import Refund from "@/pages/Refund";
 import Install from "@/pages/Install";
+import PaymentSuccess from "@/pages/PaymentSuccess";
 import AppLayout from "@/components/AppLayout";
 import NotFound from "@/pages/NotFound";
 
@@ -60,6 +61,7 @@ const App = () => (
               <Route path="/t/:publicId" element={<PublicIntake />} />
               <Route path="/install" element={<Install />} />
               <Route path="/portal/:token" element={<ClientPortal />} />
+              <Route path="/payment-success" element={<PaymentSuccess />} />
               <Route path="/app" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                 <Route index element={<Dashboard />} />
                 <Route path="templates" element={<TemplatesList />} />

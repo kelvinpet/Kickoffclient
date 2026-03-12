@@ -1,50 +1,47 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Check, X, Zap, ArrowLeft } from "lucide-react";
+import { Check, Zap, ArrowLeft } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
-const plans = [
-  {
-    name: "Free",
-    price: "$0",
-    features: [
-      { text: "2 submissions/month", included: true },
-      { text: "AI kickoff pack generation", included: true },
-      { text: "Shareable intake links", included: true },
-      { text: "Basic templates", included: true },
-      { text: "Unlimited templates", included: false },
-      { text: "Editable proposals", included: false },
-      { text: "Proposal version control", included: false },
-      { text: "Client approval tracking", included: false },
-      { text: "PDF export", included: false },
-      { text: "File attachments", included: false },
-      { text: "Custom branding", included: false },
-    ],
-    cta: "Get started",
-    variant: "outline" as const,
-  },
-  {
-    name: "Pro",
-    price: "$19/mo",
-    features: [
-      { text: "Unlimited submissions", included: true },
-      { text: "AI kickoff pack generation", included: true },
-      { text: "Shareable intake links", included: true },
-      { text: "Unlimited templates", included: true },
-      { text: "Editable proposals", included: true },
-      { text: "Proposal version control", included: true },
-      { text: "Client approval tracking", included: true },
-      { text: "PDF export", included: true },
-      { text: "File attachments", included: true },
-      { text: "Custom branding", included: true },
-      { text: "Priority AI generation", included: true },
-    ],
-    cta: "Upgrade to Pro",
-    variant: "default" as const,
-  },
-];
+import { pricingPlans } from "@/data/pricing";
 
 export default function Pricing() {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+
+  const { workspace } = useWorkspace();
+
+  const handleProClick = async () => {
+    if (!user || !workspace) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("flutterwave-checkout", {
+        body: {
+          email: user.email,
+          user_id: user.id,
+          workspace_id: workspace.id,
+          redirect_base: window.location.origin,
+        },
+      });
+      if (error) throw error;
+      if (data?.payment_link) {
+        window.location.href = data.payment_link;
+      } else {
+        throw new Error("No payment link returned");
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message || "Unable to start checkout", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="flex items-center gap-4 px-6 py-4 max-w-6xl mx-auto">
@@ -62,28 +59,39 @@ export default function Pricing() {
         <p className="text-center text-muted-foreground mb-12">Start free, upgrade when you need more.</p>
 
         <div className="grid md:grid-cols-2 gap-6">
-          {plans.map((plan) => (
-            <Card key={plan.name} className={plan.name === "Pro" ? "border-primary" : ""}>
+          {pricingPlans.map((plan) => (
+            <Card key={plan.id} className={plan.id === "pro" ? "border-primary" : ""}>
               <CardHeader>
                 <CardTitle className="text-xl">{plan.name}</CardTitle>
-                <p className="text-3xl font-bold text-foreground">{plan.price}</p>
+                <p className="text-3xl font-bold text-foreground">
+                  {plan.price}{plan.monthlyLabel || ""}
+                </p>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-3 mb-6">
                   {plan.features.map((f) => (
-                    <li key={f.text} className={`flex items-center gap-2 text-sm ${f.included ? "text-foreground" : "text-muted-foreground/50"}`}>
-                      {f.included ? (
-                        <Check className="h-4 w-4 text-primary shrink-0" />
-                      ) : (
-                        <X className="h-4 w-4 text-muted-foreground/30 shrink-0" />
-                      )}
-                      {f.text}
+                    <li key={f} className="flex items-center gap-2 text-sm text-foreground">
+                      <Check className="h-4 w-4 text-primary shrink-0" />
+                      {f}
                     </li>
                   ))}
                 </ul>
-                <Link to="/signup">
-                  <Button variant={plan.variant} className="w-full">{plan.cta}</Button>
-                </Link>
+                {plan.id === "pro" && user ? (
+                  <Button
+                    variant={plan.popular ? "default" : "outline"}
+                    className="w-full"
+                    onClick={handleProClick}
+                    disabled={loading}
+                  >
+                    {loading ? "Please wait…" : plan.cta}
+                  </Button>
+                ) : (
+                  <Link to="/signup">
+                    <Button variant={plan.popular ? "default" : "outline"} className="w-full">
+                      {plan.cta}
+                    </Button>
+                  </Link>
+                )}
               </CardContent>
             </Card>
           ))}

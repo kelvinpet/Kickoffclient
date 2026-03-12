@@ -178,14 +178,17 @@ export function normalizeLegacyReport(report: any): CoreReport {
 
 // version helpers
 export function getReportVersion(report: any): string {
+  if (!report) return "v1"; // missing report => treat as legacy
   return report.report_version || "v1";
 }
 
 export function isV2Report(report: any): boolean {
+  if (!report) return false;
   return getReportVersion(report) === "v2";
 }
 
-export function getCoreReport(report: any): CoreReport {
+export function getCoreReport(report: any): CoreReport | null {
+  if (!report) return null;
   if (isV2Report(report) && report.core_report_json) {
     return report.core_report_json as CoreReport;
   }

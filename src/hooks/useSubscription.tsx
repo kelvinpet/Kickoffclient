@@ -5,13 +5,20 @@ import { useWorkspace } from "./useWorkspace";
 export interface Subscription {
   id: string;
   workspace_id: string;
+  user_id?: string | null;
   provider: string;
   plan: string;
   status: string;
-  paystack_customer_code: string | null;
-  paystack_subscription_code: string | null;
-  paystack_email_token: string | null;
-  paystack_plan_code: string | null;
+  billing_cycle?: string | null;
+  amount?: number | null;
+  currency?: string | null;
+  current_period_start?: string | null;
+  current_period_end?: string | null;
+  expires_at?: string | null;
+  renewed_at?: string | null;
+  canceled_at?: string | null;
+  tx_ref?: string | null;
+  transaction_id?: string | null;
   next_payment_date: string | null;
   created_at: string;
   updated_at: string;
@@ -29,7 +36,22 @@ export function useSubscription() {
       .select("*")
       .eq("workspace_id", workspace.id)
       .single() as any;
-    setSubscription(data as Subscription | null);
+
+    let sub: Subscription | null = data as Subscription | null;
+
+    if (sub && sub.expires_at) {
+      const now = new Date();
+      if (new Date(sub.expires_at) < now && sub.status !== "expired") {
+        // automatically downgrade expired subscription
+        await supabase
+          .from("subscriptions" as any)
+          .update({ plan: "free", status: "expired" })
+          .eq("id", sub.id);
+        sub = { ...sub, plan: "free", status: "expired" };
+      }
+    }
+
+    setSubscription(sub);
     setLoading(false);
   };
 
@@ -37,7 +59,11 @@ export function useSubscription() {
     fetchSubscription();
   }, [workspace]);
 
-  const isPro = (workspace as any)?.plan === "pro" || subscription?.status === "active";
+  const isPro =
+    (workspace as any)?.plan === "pro" ||
+    ((subscription?.status === "active" || subscription?.status === "canceled") &&
+      subscription.expires_at &&
+      new Date(subscription.expires_at) > new Date());
 
   return { subscription, loading, isPro, refetch: fetchSubscription };
 }

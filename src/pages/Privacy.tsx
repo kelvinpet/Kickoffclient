@@ -15,7 +15,7 @@ export default function Privacy() {
           <h2 className="text-lg font-semibold text-foreground">3. Data Storage</h2>
           <p>All data is stored securely using industry-standard encryption. Client submissions and files are stored in secure cloud storage.</p>
           <h2 className="text-lg font-semibold text-foreground">4. Third-Party Services</h2>
-          <p>We use Paystack for payment processing and AI services for report generation. These services have their own privacy policies.</p>
+          <p>We use Flutterwave for payment processing and AI services for report generation. These services have their own privacy policies.</p>
           <h2 className="text-lg font-semibold text-foreground">5. Your Rights</h2>
           <p>You can request access to, correction of, or deletion of your personal data by contacting us.</p>
         </div>

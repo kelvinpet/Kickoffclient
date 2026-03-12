@@ -143,38 +143,6 @@ export type Database = {
           },
         ]
       }
-      paystack_transactions: {
-        Row: {
-          created_at: string
-          id: string
-          paystack_reference: string
-          status: string
-          workspace_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          paystack_reference: string
-          status?: string
-          workspace_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          paystack_reference?: string
-          status?: string
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "paystack_transactions_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           created_at: string
@@ -349,43 +317,43 @@ export type Database = {
           created_at: string
           id: string
           next_payment_date: string | null
-          paystack_customer_code: string | null
-          paystack_email_token: string | null
-          paystack_plan_code: string | null
-          paystack_subscription_code: string | null
           plan: string
           provider: string
           status: string
           updated_at: string
           workspace_id: string
+          user_id: string | null
+          expires_at: string | null
+          tx_ref: string | null
+          transaction_id: string | null
         }
         Insert: {
           created_at?: string
           id?: string
           next_payment_date?: string | null
-          paystack_customer_code?: string | null
-          paystack_email_token?: string | null
-          paystack_plan_code?: string | null
-          paystack_subscription_code?: string | null
           plan?: string
           provider?: string
           status?: string
           updated_at?: string
           workspace_id: string
+          user_id?: string | null
+          expires_at?: string | null
+          tx_ref?: string | null
+          transaction_id?: string | null
         }
         Update: {
           created_at?: string
           id?: string
           next_payment_date?: string | null
-          paystack_customer_code?: string | null
-          paystack_email_token?: string | null
-          paystack_plan_code?: string | null
-          paystack_subscription_code?: string | null
           plan?: string
           provider?: string
           status?: string
           updated_at?: string
           workspace_id?: string
+          user_id?: string | null
+          expires_at?: string | null
+          tx_ref?: string | null
+          transaction_id?: string | null
         }
         Relationships: [
           {

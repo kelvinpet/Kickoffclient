@@ -476,7 +476,7 @@ function KickoffPreview() {
 
   const items = [
     { icon: FileText, label: "Scope of Work", desc: "Locked & signed by client" },
-    { icon: DollarSign, label: "Deposit Received", desc: "$3,450 via Paystack" },
+    { icon: DollarSign, label: "Deposit Received", desc: "$3,450 via Flutterwave" },
     { icon: Mail, label: "Kickoff Email Sent", desc: "Professional intro with next steps" },
     { icon: Calendar, label: "Phase 1 Begins", desc: "Discovery & Research — 2 weeks" },
   ];
