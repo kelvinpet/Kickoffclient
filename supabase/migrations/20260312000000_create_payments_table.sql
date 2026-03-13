@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS public.payments (
   currency text NOT NULL DEFAULT 'USD',
   status text,
   tx_ref text UNIQUE,
-  transaction_id text,
+  transaction_id text UNIQUE,
   payment_method text,
   plan text,
   created_at timestamptz NOT NULL DEFAULT now()

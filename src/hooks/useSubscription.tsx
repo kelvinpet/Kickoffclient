@@ -25,7 +25,7 @@ export interface Subscription {
 }
 
 export function useSubscription() {
-  const { workspace } = useWorkspace();
+  const { workspace, refetch: refetchWorkspace } = useWorkspace();
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -39,6 +39,32 @@ export function useSubscription() {
 
     let sub: Subscription | null = data as Subscription | null;
 
+    if (!sub) {
+      // Create default free subscription if none exists
+      const { data: existingSubscription } = await supabase
+        .from("subscriptions" as any)
+        .select("workspace_id")
+        .eq("workspace_id", workspace.id)
+        .maybeSingle();
+
+      if (!existingSubscription) {
+        const { data: newSub, error: insertError } = await supabase
+          .from("subscriptions" as any)
+          .insert({
+            workspace_id: workspace.id,
+            provider: "flutterwave",
+            plan: "free",
+            status: "expired",
+          })
+          .select()
+          .single();
+
+        if (!insertError && newSub) {
+          sub = newSub as Subscription;
+        }
+      }
+    }
+
     if (sub && sub.expires_at) {
       const now = new Date();
       if (new Date(sub.expires_at) < now && sub.status !== "expired") {
@@ -48,6 +74,14 @@ export function useSubscription() {
           .update({ plan: "free", status: "expired" })
           .eq("id", sub.id);
         sub = { ...sub, plan: "free", status: "expired" };
+
+        // also downgrade workspace plan
+        await supabase
+          .from("workspaces")
+          .update({ plan: "free" })
+          .eq("id", workspace.id);
+        // refetch workspace to update local state
+        refetchWorkspace();
       }
     }
 
@@ -59,11 +93,15 @@ export function useSubscription() {
     fetchSubscription();
   }, [workspace]);
 
+  // Compute effective plan: must be pro, active, and unexpired
+  const now = Date.now();
   const isPro =
-    (workspace as any)?.plan === "pro" ||
-    ((subscription?.status === "active" || subscription?.status === "canceled") &&
-      subscription.expires_at &&
-      new Date(subscription.expires_at) > new Date());
+    subscription?.plan === "pro" &&
+    subscription?.status === "active" &&
+    subscription?.current_period_end &&
+    new Date(subscription.current_period_end).getTime() > now;
 
-  return { subscription, loading, isPro, refetch: fetchSubscription };
+  const effectivePlan = isPro ? "pro" : "free";
+
+  return { subscription, loading, isPro, effectivePlan, refetch: fetchSubscription };
 }

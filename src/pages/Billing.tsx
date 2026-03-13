@@ -14,7 +14,7 @@ import { pricingPlans } from "@/data/pricing";
 
 export default function Billing() {
   const { workspace, refetch: refetchWorkspace } = useWorkspace();
-  const { subscription, isPro, refetch: refetchSubscription } = useSubscription();
+  const { subscription, isPro, effectivePlan, refetch: refetchSubscription } = useSubscription();
   const [initializing, setInitializing] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -54,7 +54,6 @@ export default function Billing() {
     <div className="max-w-lg mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-foreground">Billing</h1>
 
-
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
@@ -63,31 +62,31 @@ export default function Billing() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
-            <Badge variant={isPro ? "default" : "secondary"} className="text-sm">
-              {isPro ? "Pro" : "Free"}
+            <Badge variant={effectivePlan === "pro" ? "default" : "secondary"} className="text-sm">
+              {effectivePlan === "pro" ? "Pro" : "Free"}
             </Badge>
-            {isPro && <CheckCircle className="h-4 w-4 text-success" />}
+            {effectivePlan === "pro" && <CheckCircle className="h-4 w-4 text-success" />}
           </div>
 
           {subscription && (
             <div className="space-y-2 text-sm text-muted-foreground">
-              <p>Status: <span className="text-foreground capitalize">{subscription.status}</span></p>
-              {subscription.expires_at && (
-                <p>Expires: <span className="text-foreground">{new Date(subscription.expires_at).toLocaleDateString()}</span></p>
+              <p>Status: <span className="text-foreground capitalize">
+                {effectivePlan === "pro" ? "Active" :
+                  (subscription?.current_period_end && new Date(subscription.current_period_end).getTime() < Date.now()) ? "Expired" : "Free"}
+              </span></p>
+              {effectivePlan === "pro" && subscription.current_period_end && (
+                <p>Access expires: <span className="text-foreground">{new Date(subscription.current_period_end).toLocaleString()}</span></p>
               )}
-              {subscription.current_period_end && (
-                <p>Period end: <span className="text-foreground">{new Date(subscription.current_period_end).toLocaleDateString()}</span></p>
-              )}
-              {subscription.next_payment_date && (
-                <p>Next payment: <span className="text-foreground">{new Date(subscription.next_payment_date).toLocaleDateString()}</span></p>
+              {effectivePlan !== "pro" && (
+                <p>Upgrade to regain Pro access.</p>
               )}
             </div>
           )}
 
-          {!isPro && (
+          {effectivePlan !== "pro" && (
             <div className="pt-2">
               <p className="text-sm text-muted-foreground mb-3">
-                Upgrade to Pro for $19/month — unlimited submissions, PDF export, and custom branding.
+                If your Pro access expires, you can upgrade again anytime.
               </p>
               <Button onClick={handleUpgrade} disabled={initializing} className="w-full">
                 {initializing ? (
@@ -97,33 +96,6 @@ export default function Billing() {
                 )}
               </Button>
             </div>
-          )}
-
-          {isPro && (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Your subscription is active. Contact support to make changes or use
-                the button below to cancel.
-              </p>
-              <button
-                onClick={async () => {
-                  try {
-                    const { error } = await supabase
-                      .from("subscriptions")
-                      .update({ status: "canceled", canceled_at: new Date().toISOString() })
-                      .eq("workspace_id", workspace?.id);
-                    if (error) throw error;
-                    toast({ title: "Canceled", description: "Your subscription was canceled and will remain active until the end of the current period." });
-                    refetchSubscription();
-                  } catch (err: any) {
-                    toast({ title: "Error", description: err.message || "Unable to cancel", variant: "destructive" });
-                  }
-                }}
-                className="mt-2 px-4 py-2 border border-destructive text-destructive rounded"
-              >
-                Cancel subscription
-              </button>
-            </>
           )}
         </CardContent>
       </Card>

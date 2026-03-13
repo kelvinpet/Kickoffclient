@@ -31,16 +31,37 @@ export default async (req: Request) => {
 
     const core = report.core_report_json || {};
     const prompt = `${PRICING_PROMPT}\n${JSON.stringify(core)}`;
-    const res = await fetch("https://api.groq.com/v1/execute", {
+    const groqPayload = {
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: "" },
+        { role: "user", content: prompt },
+      ],
+    };
+    console.log("pricing-page groq payload", { groqPayload });
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${Deno.env.get("GROQ_API_TOKEN")}`,
+        Authorization: `Bearer ${Deno.env.get("GROQ_API_KEY")}`,
       },
-      body: JSON.stringify({ model: "groq:codex", prompt, max_tokens: 1500, temperature: 0.6 }),
+      body: JSON.stringify(groqPayload),
     });
-    const data = await res.json();
-    const pricingJson = data.choices?.[0]?.text ? JSON.parse(data.choices[0].text) : data;
+    const rawText = await res.text();
+    console.log("pricing-page groq response", { status: res.status, rawText });
+    if (!res.ok) {
+      throw new Error(`Groq API error: ${res.status} - ${rawText}`);
+    }
+    let pricingJson: any;
+    try {
+      const parsed = JSON.parse(rawText);
+      pricingJson = parsed?.choices?.[0]?.message?.content;
+      if (pricingJson) pricingJson = JSON.parse(pricingJson);
+    } catch (e) {
+      console.error("pricing-page parse error", e, { rawText });
+      pricingJson = rawText;
+    }
 
     await supabase.from("ai_reports").update({
       pricing_page_json: pricingJson,

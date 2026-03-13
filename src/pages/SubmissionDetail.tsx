@@ -5,6 +5,7 @@ import { getMergedAnswers, getClientIdentity, normalizeSubmission, getCoreReport
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import PremiumKickoffReport from "@/components/PremiumKickoffReport";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useSubscription } from "@/hooks/useSubscription";
@@ -191,7 +192,12 @@ export default function SubmissionDetail() {
     setGenerating(true);
     setGeneratingMode(mode === "standard" ? "core" : mode);
 
-    const body: any = { submission_id: submission.id, mode, business_name: workspace?.business_name };
+    const body: any = {
+      submission_id: submission.id,
+      mode,
+      business_name: workspace?.business_name,
+      workspace_id: workspace?.id,
+    };
     if (isRegenerate && report) {
       body.regenerate = true;
       body.report_id = report.id;
@@ -203,8 +209,8 @@ export default function SubmissionDetail() {
     if (error) {
       toast({ title: "AI generation failed", description: String(error.message || error), variant: "destructive" });
     } else {
-      // core endpoint returns { success:true, core_report_json: ..., maybe report }
-      const coreData = data.core_report_json ? { ...data.report, core_report_json: data.core_report_json } : data.report;
+      // core endpoint returns { success:true, core_report_json: ..., raw_text?, maybe report }
+      const coreData = data.core_report_json ? { ...data.report, core_report_json: data.core_report_json, raw_text: data.raw_text } : { ...data.report, raw_text: data.raw_text };
       setReport(coreData);
       toast({ title: isRegenerate ? "Report regenerated!" : "Report generated!" });
       if (!isRegenerate && submission.portal_token) {
@@ -460,23 +466,8 @@ export default function SubmissionDetail() {
 
       {/* Project Snapshot */}
       {structured && (
-        <Card>
-          <CardHeader><CardTitle className="text-base">Project Snapshot</CardTitle></CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-              <div><span className="font-medium">Client:</span> {clientName || "—"}</div>
-              <div><span className="font-medium">Company:</span> {(submission as any).client_company || "—"}</div>
-              <div><span className="font-medium">Goal:</span> {mergedAnswers["Project Goal"] || "—"}</div>
-              <div><span className="font-medium">Budget:</span> {formatBudget(mergedAnswers["Project Budget"] || mergedAnswers["Budget Range"])}</div>
-              <div><span className="font-medium">Timeline:</span> {formatTimeline(mergedAnswers["Project Timeline"] || mergedAnswers["Timeline"])}</div>
-              <div><span className="font-medium">Recommended Package:</span> {structured.best_recommendation?.starting_package?.name || "—"}</div>
-              <div><span className="font-medium">Risk Level:</span> {structured.kickoff_iq_score ? (structured.kickoff_iq_score.scope_risk_score >= 70 ? "High" : structured.kickoff_iq_score.scope_risk_score >= 40 ? "Medium" : "Low") : "—"}</div>
-            </div>
-          </CardContent>
-        </Card>
+        <PremiumKickoffReport report={structured} />
       )}
-
-      {/* Client change request */}
       {(submission as any).client_change_request && status === "needs_changes" && (
         <Card className="border-destructive/20">
           <CardContent className="py-4">
@@ -813,8 +804,36 @@ function StructuredReport({
 
   const d = data;
 
+  // helper detection of placeholders
+  const isPlaceholderText = (t: any) =>
+    typeof t === "string" && /^(No |Executive summary not available\.|$)/.test(t);
+  const isEmptyField = (v: any) => {
+    if (typeof v === "string") return isPlaceholderText(v);
+    if (Array.isArray(v)) return v.length === 0 || v.every(isPlaceholderText);
+    if (typeof v === "object" && v !== null) {
+      return Object.values(v).every(isEmptyField);
+    }
+    return !v;
+  };
+  const reportSeemsEmpty =
+    isEmptyField(d.executive_summary) &&
+    isEmptyField(d.confirmed_facts) &&
+    isEmptyField(d.assumptions) &&
+    isEmptyField(d.needs_clarification);
+
   return (
     <div className="space-y-4">
+      {reportSeemsEmpty && (
+        <div className="p-3 mb-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-700">
+          <strong>AI output appears to be empty.</strong> Try regenerating ("Detailed" mode often helps) or review the raw response below.
+        </div>
+      )}
+      {reportSeemsEmpty && data && (data as any).raw_text && (
+        <div className="p-3 mb-4 bg-gray-100 text-xs whitespace-pre-wrap">
+          <strong>Raw AI response:</strong>
+          <pre>{(data as any).raw_text}</pre>
+        </div>
+      )}
       {/* Confirmed Facts / Assumptions / Needs Clarification */}
       {(d.confirmed_facts || d.assumptions || d.needs_clarification) && (
         <div className="grid gap-4 md:grid-cols-3">

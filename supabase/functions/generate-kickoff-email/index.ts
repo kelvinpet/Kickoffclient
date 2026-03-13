@@ -37,16 +37,35 @@ export default async (req: Request) => {
 
     const prompt = `${EMAIL_PROMPT}\n${JSON.stringify(core)}`;
 
-    const res = await fetch("https://api.groq.com/v1/execute", {
+    const groqPayload = {
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.7,
+      messages: [
+        { role: "system", content: "" },
+        { role: "user", content: prompt },
+      ],
+    };
+    console.log("kickoff-email groq payload", { groqPayload });
+    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${Deno.env.get("GROQ_API_TOKEN")}`,
+        Authorization: `Bearer ${Deno.env.get("GROQ_API_KEY")}`,
       },
-      body: JSON.stringify({ model: "groq:codex", prompt, max_tokens: 1200, temperature: 0.6 }),
+      body: JSON.stringify(groqPayload),
     });
-    const data = await res.json();
-    const emailText = data.choices?.[0]?.text || "";
+    const rawText = await res.text();
+    console.log("kickoff-email groq response", { status: res.status, rawText });
+    if (!res.ok) {
+      throw new Error(`Groq API error: ${res.status} - ${rawText}`);
+    }
+    let emailText = rawText;
+    try {
+      const parsed = JSON.parse(rawText);
+      emailText = parsed?.choices?.[0]?.message?.content || rawText;
+    } catch (e) {
+      console.error("kickoff-email parse error", e, { rawText });
+    }
 
     await supabase.from("ai_reports").update({
       kickoff_email: emailText,
