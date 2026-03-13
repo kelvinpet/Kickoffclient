@@ -123,7 +123,6 @@ export default function SubmissionDetail() {
     setSendingReminder(true);
     const { name: identityName, email: identityEmail } = getClientIdentity(submission);
     try {
-      const portalUrl = `${window.location.origin}/portal/${portalToken}`;
       const { error } = await supabase.functions.invoke("send-notification", {
         body: {
           type: "manual_reminder",
@@ -149,6 +148,8 @@ export default function SubmissionDetail() {
 
   useEffect(() => {
     if (!id) return;
+
+    // Fetch submission and template fields
     supabase.from("submissions").select("*, templates(title)").eq("id", id).single().then(({ data }) => {
       setSubmission(data);
       if (data?.template_id) {
@@ -156,8 +157,13 @@ export default function SubmissionDetail() {
           .then(({ data: fields }) => setTemplateFields(fields || []));
       }
     });
-    supabase.from("ai_reports").select("*").eq("submission_id", id).single().then(({ data }) => setReport(data));
-    // fetch latest contract signature, ignoring 406 errors which may occur
+
+    // Fetch AI report - Using maybeSingle to handle cases where report doesn't exist yet
+    supabase.from("ai_reports").select("*").eq("submission_id", id).maybeSingle().then(({ data }) => {
+       if (data) setReport(data);
+    });
+
+    // fetch latest contract signature
     (async () => {
       try {
         const { data: sig, error } = await (supabase.from("contract_signatures" as any) as any)
@@ -165,8 +171,9 @@ export default function SubmissionDetail() {
           .eq("submission_id", id)
           .order("signed_at", { ascending: false })
           .limit(1)
-          .single();
-        if (error && error.status !== 406) {
+          .maybeSingle(); // Fix: replaced .single()
+
+        if (error) {
           console.error("signature query error", error);
         }
         if (sig) setContractSignature(sig);
@@ -174,6 +181,7 @@ export default function SubmissionDetail() {
         console.error("signature fetch failed", e);
       }
     })();
+    
     fetchVersions();
   }, [id]);
 
@@ -192,8 +200,11 @@ export default function SubmissionDetail() {
     setGenerating(true);
     setGeneratingMode(mode === "standard" ? "core" : mode);
 
+    const mergedAnswers = getMergedAnswers(submission);
+
     const body: any = {
       submission_id: submission.id,
+      answers: mergedAnswers, // CRITICAL FIX: Ensure answers are sent to Edge Function
       mode,
       business_name: workspace?.business_name,
       workspace_id: workspace?.id,
@@ -203,16 +214,15 @@ export default function SubmissionDetail() {
       body.report_id = report.id;
     }
 
-    const { data, error } = await supabase.functions.invoke("generate-kickoff-core", { body });
-    setGenerating(false);
-    setGeneratingMode(null);
-    if (error) {
-      toast({ title: "AI generation failed", description: String(error.message || error), variant: "destructive" });
-    } else {
-      // core endpoint returns { success:true, core_report_json: ..., raw_text?, maybe report }
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-kickoff-core", { body });
+      if (error) throw error;
+
+      // Handle successful generation
       const coreData = data.core_report_json ? { ...data.report, core_report_json: data.core_report_json, raw_text: data.raw_text } : { ...data.report, raw_text: data.raw_text };
       setReport(coreData);
       toast({ title: isRegenerate ? "Report regenerated!" : "Report generated!" });
+      
       if (!isRegenerate && submission.portal_token) {
         supabase.functions.invoke("send-notification", {
           body: {
@@ -222,6 +232,11 @@ export default function SubmissionDetail() {
           },
         }).catch((e) => console.error("Notification send failed:", e));
       }
+    } catch (e: any) {
+      toast({ title: "AI generation failed", description: e.message || "Unknown error", variant: "destructive" });
+    } finally {
+      setGenerating(false);
+      setGeneratingMode(null);
     }
   };
 
@@ -232,8 +247,7 @@ export default function SubmissionDetail() {
     setGenerating(false);
     if (error) return toast({ title: "Email generation failed", description: String(error.message), variant: "destructive" });
     toast({ title: "Email generated!" });
-    // refresh report row
-    const { data: refreshed } = await supabase.from("ai_reports").select("*").eq("submission_id", submission.id).single();
+    const { data: refreshed } = await supabase.from("ai_reports").select("*").eq("submission_id", submission.id).maybeSingle();
     if (refreshed) setReport(refreshed);
   };
 
@@ -244,7 +258,7 @@ export default function SubmissionDetail() {
     setGenerating(false);
     if (error) return toast({ title: "Proposal generation failed", description: String(error.message), variant: "destructive" });
     toast({ title: "Proposal generated!" });
-    const { data: refreshed } = await supabase.from("ai_reports").select("*").eq("submission_id", submission.id).single();
+    const { data: refreshed } = await supabase.from("ai_reports").select("*").eq("submission_id", submission.id).maybeSingle();
     if (refreshed) setReport(refreshed);
   };
 
@@ -255,7 +269,7 @@ export default function SubmissionDetail() {
     setGenerating(false);
     if (error) return toast({ title: "Pricing page failed", description: String(error.message), variant: "destructive" });
     toast({ title: "Pricing page generated!" });
-    const { data: refreshed } = await supabase.from("ai_reports").select("*").eq("submission_id", submission.id).single();
+    const { data: refreshed } = await supabase.from("ai_reports").select("*").eq("submission_id", submission.id).maybeSingle();
     if (refreshed) setReport(refreshed);
   };
 
@@ -317,7 +331,6 @@ export default function SubmissionDetail() {
     const businessName = workspace?.business_name || "KickoffClient";
     const brandColor = workspace?.brand_color || "#6366f1";
 
-    // Helper: hex to RGB
     const hexToRgb = (hex: string) => {
       const r = parseInt(hex.slice(1, 3), 16);
       const g = parseInt(hex.slice(3, 5), 16);
@@ -326,30 +339,25 @@ export default function SubmissionDetail() {
     };
     const bc = hexToRgb(brandColor);
 
-    // Brand color header bar
     doc.setFillColor(bc.r, bc.g, bc.b);
     doc.rect(0, 0, 210, 12, "F");
 
     y = 24;
 
-    // Logo placeholder (brand initial)
     doc.setFillColor(bc.r, bc.g, bc.b);
     doc.roundedRect(14, y - 4, 10, 10, 2, 2, "F");
     doc.setFontSize(8); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
     doc.text(businessName.charAt(0).toUpperCase(), 17, y + 3);
     doc.setTextColor(0, 0, 0);
 
-    // Business name
     doc.setFontSize(12); doc.setFont("helvetica", "bold");
     doc.text(businessName, 28, y + 3); y += 14;
 
-    // Title
     doc.setFontSize(22); doc.setFont("helvetica", "bold");
     doc.setTextColor(bc.r, bc.g, bc.b);
     doc.text("Kickoff Pack", 14, y); y += 10;
     doc.setTextColor(0, 0, 0);
 
-    // Template & client
     doc.setFontSize(12); doc.setFont("helvetica", "normal");
     doc.text((submission as any).templates?.title || "", 14, y); y += 7;
     doc.setFontSize(10);
@@ -357,7 +365,6 @@ export default function SubmissionDetail() {
     doc.text(`Client: ${pdfName} — ${pdfEmail}`, 14, y); y += 5;
     doc.text(`Generated: ${new Date().toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" })}`, 14, y); y += 12;
 
-    // Divider
     doc.setDrawColor(bc.r, bc.g, bc.b); doc.setLineWidth(0.5);
     doc.line(14, y, 196, y); y += 8;
 
@@ -378,7 +385,6 @@ export default function SubmissionDetail() {
       if (structured.solution_blueprint) addSection("Solution Blueprint", typeof structured.solution_blueprint === "string" ? structured.solution_blueprint : JSON.stringify(structured.solution_blueprint, null, 2));
       addSection("Scope of Work", typeof structured.scope_doc === "string" ? structured.scope_doc : JSON.stringify(structured.scope_doc, null, 2));
       if (structured.timeline) addSection("Timeline", typeof structured.timeline === "string" ? structured.timeline : JSON.stringify(structured.timeline, null, 2));
-      // kickoff_email is derived; fallback to legacy field
       addSection("Kickoff Email", structured.kickoff_email || report.kickoff_email || "");
     } else {
       addSection("Summary", report.summary || "");
@@ -386,17 +392,15 @@ export default function SubmissionDetail() {
       addSection("Scope of Work", report.scope_doc || "");
     }
 
-    // Footer on each page
     const pageCount = doc.getNumberOfPages();
     for (let p = 1; p <= pageCount; p++) {
       doc.setPage(p);
       doc.setFontSize(8); doc.setFont("helvetica", "normal");
       doc.setTextColor(150, 150, 150);
-      doc.text(`${businessName} • Generated byClienticClientffIQ`, 14, 287);
+      doc.text(`${businessName} • Generated by KickoffIQ`, 14, 287);
       doc.text(`Page ${p} of ${pageCount}`, 180, 287);
     }
 
-    // reuse pdfName from earlier destructure
     doc.save(`kickoff-pack-${pdfName}.pdf`);
   };
 
@@ -451,7 +455,6 @@ export default function SubmissionDetail() {
         </div>
       </div>
 
-      {/* Activity Timeline */}
       <Card>
         <CardContent className="py-4">
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs">
@@ -464,7 +467,6 @@ export default function SubmissionDetail() {
         </CardContent>
       </Card>
 
-      {/* Project Snapshot */}
       {structured && (
         <PremiumKickoffReport report={structured} />
       )}
@@ -477,7 +479,6 @@ export default function SubmissionDetail() {
         </Card>
       )}
 
-      {/* Portal Link */}
       {portalUrl && (
         <Card>
           <CardContent className="flex items-center justify-between py-3 gap-2">
@@ -498,7 +499,6 @@ export default function SubmissionDetail() {
         </Card>
       )}
 
-      {/* Contract Signature */}
       {contractSignature && (
         <Card className="border-primary/20">
           <CardContent className="py-4 space-y-2">
@@ -517,7 +517,6 @@ export default function SubmissionDetail() {
         </Card>
       )}
 
-      {/* Client Answers */}
       <Card>
         <CardHeader><CardTitle className="text-base">Client Answers</CardTitle></CardHeader>
         <CardContent>
@@ -537,7 +536,6 @@ export default function SubmissionDetail() {
       </Card>
 
 
-      {/* Generate / Regenerate */}
       {!report ? (
         <Button onClick={() => generateReport(false)} disabled={generating} className="w-full">
           {generating ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating…</> : <><Sparkles className="h-4 w-4 mr-2" /> Generate Kickoff Report</>}
@@ -573,7 +571,6 @@ export default function SubmissionDetail() {
         </div>
       )}
 
-      {/* Regenerate confirmation */}
       <AlertDialog open={confirmRegenerate} onOpenChange={setConfirmRegenerate}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -587,7 +584,6 @@ export default function SubmissionDetail() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete confirmation */}
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -605,7 +601,6 @@ export default function SubmissionDetail() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Version History Dialog */}
       <Dialog open={showVersions} onOpenChange={setShowVersions}>
         <DialogContent>
           <DialogHeader>
@@ -770,18 +765,14 @@ function StructuredReport({
   followupQuestions?: string[];
   submission?: any;
 }) {
-  // Per-section editing state: { [sectionKey]: editableTextValue }
   const [editingSections, setEditingSections] = useState<Record<string, string>>({});
 
   const toggleEdit = (key: string, value: any) => {
     if (value === undefined) {
-      // Cancel
       setEditingSections(prev => { const n = { ...prev }; delete n[key]; return n; });
     } else if (key in editingSections) {
-      // Update text
       setEditingSections(prev => ({ ...prev, [key]: typeof value === "string" ? value : sectionToText(value) }));
     } else {
-      // Start editing
       if (!isPro) { onUpgrade?.(); return; }
       setEditingSections(prev => ({ ...prev, [key]: sectionToText(value) }));
     }
@@ -804,7 +795,6 @@ function StructuredReport({
 
   const d = data;
 
-  // helper detection of placeholders
   const isPlaceholderText = (t: any) =>
     typeof t === "string" && /^(No |Executive summary not available\.|$)/.test(t);
   const isEmptyField = (v: any) => {
@@ -834,7 +824,6 @@ function StructuredReport({
           <pre>{(data as any).raw_text}</pre>
         </div>
       )}
-      {/* Confirmed Facts / Assumptions / Needs Clarification */}
       {(d.confirmed_facts || d.assumptions || d.needs_clarification) && (
         <div className="grid gap-4 md:grid-cols-3">
           {d.confirmed_facts && (
@@ -987,7 +976,6 @@ function StructuredReport({
         </EditableSectionCard>
       )}
 
-      {/* Best Recommendation */}
       {d.best_recommendation && (
         <EditableSectionCard title="Best Recommendation" sectionKey="best_recommendation" data={d.best_recommendation} editingSections={editingSections} onToggleEdit={toggleEdit} onSave={saveSection} onCopy={() => onCopy(JSON.stringify(d.best_recommendation, null, 2))}>
           <p className="text-sm text-foreground whitespace-pre-wrap">{d.best_recommendation.approach}</p>
@@ -1008,7 +996,6 @@ function StructuredReport({
         </EditableSectionCard>
       )}
 
-      {/* MVP Adjustment */}
       {d.mvp_adjustment && d.mvp_adjustment.recommended && (
         <EditableSectionCard title="MVP Adjustment" sectionKey="mvp_adjustment" data={d.mvp_adjustment} editingSections={editingSections} onToggleEdit={toggleEdit} onSave={saveSection} onCopy={() => onCopy(JSON.stringify(d.mvp_adjustment, null, 2))}>
           <p className="text-sm text-foreground mb-3">{d.mvp_adjustment.rationale}</p>
@@ -1081,7 +1068,7 @@ function StructuredReport({
       </EditableSectionCard>
 
       {d.kickoff_iq_score && (
-        <EditableSectionCard title="KickoffClient Score" sectionKey="kickoff_iq_score" data={d.kickoff_iq_score} editingSections={editingSections} onToggleEdit={toggleEdit} onSave={saveSection} onCopy={() => onCopy(JSON.stringify(d.kickoff_iq_score, null, 2))}>
+        <EditableSectionCard title="Kickoff Score" sectionKey="kickoff_iq_score" data={d.kickoff_iq_score} editingSections={editingSections} onToggleEdit={toggleEdit} onSave={saveSection} onCopy={() => onCopy(JSON.stringify(d.kickoff_iq_score, null, 2))}>
           <div className="space-y-4">
             <div className="grid gap-3">
               <ScoreBar score={d.kickoff_iq_score.clarity_score} label="Clarity" />
@@ -1109,7 +1096,6 @@ function StructuredReport({
         </EditableSectionCard>
       )}
 
-      {/* insertion: show follow-up info from the AI report and submission before next step */}
       {d.missing_info && (
         <EditableSectionCard title="Follow-up Questions" sectionKey="missing_info" data={d.missing_info} editingSections={editingSections} onToggleEdit={toggleEdit} onSave={saveSection} onCopy={() => onCopy(JSON.stringify(d.missing_info, null, 2))}>
           {typeof d.missing_info === "object" && !Array.isArray(d.missing_info) ? (
